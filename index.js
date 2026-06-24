@@ -1,7 +1,11 @@
 const express = require('express');
+const cors = require('cors');
 const app = express();
 const port = process.env.PORT || 5000;
 require('dotenv').config();
+
+app.use(cors());
+app.use(express.json());
 
 const { MongoClient, ServerApiVersion } = require('mongodb');
 
@@ -24,12 +28,21 @@ async function run() {
     try {
         // Connect the client to the server	(optional starting in v4.7)
         await client.connect();
+
+        const database = client.db("cooksphere");
+        const recipesCollection = database.collection("recipes");
+
+        app.post('/recipes', async (req, res) => {
+            const recipe = req.body;
+            const result = await recipesCollection.insertOne(recipe);
+            res.send(result);
+        });
+
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
-    } finally {
-        // Ensures that the client will close when you finish/error
-        await client.close();
+    } catch (error) {
+        console.error(error);
     }
 }
 run().catch(console.dir);
