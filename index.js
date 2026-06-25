@@ -34,6 +34,22 @@ async function run() {
 
         app.post('/recipes', async (req, res) => {
             const recipe = req.body;
+            const authorEmail = recipe.authorEmail;
+            
+            if (!authorEmail) {
+                return res.status(400).send({ message: "Author email is required" });
+            }
+
+            const userDoc = await database.collection("user").findOne({ email: authorEmail });
+            const isPremium = userDoc && (userDoc.role === "premium" || userDoc.plan === "premium" || userDoc.role === "admin");
+
+            if (!isPremium) {
+                const count = await recipesCollection.countDocuments({ authorEmail });
+                if (count >= 2) {
+                    return res.status(400).send({ message: "Free tier users are limited to 2 recipes. Please upgrade to Premium!" });
+                }
+            }
+
             const result = await recipesCollection.insertOne(recipe);
             res.send(result);
         });
@@ -98,7 +114,7 @@ async function run() {
 
         app.post('/recipes/:id/purchase', async (req, res) => {
             const recipeId = req.params.id;
-            const { email } = req.body;
+            const { email, price, currency } = req.body;
             if (!email) {
                 return res.status(400).send({ message: "Email is required" });
             }
@@ -117,16 +133,19 @@ async function run() {
             const txnId = `TXN-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
             await database.collection("purchases").insertOne({ userEmail: email, recipeId, createdAt: new Date() });
             
+            const priceVal = parseFloat(price) || 4.99;
+            const currencyVal = currency || "USD";
             await database.collection("transactions").insertOne({
                 userEmail: email,
                 recipeId,
                 recipeName: recipe.recipeName,
-                price: 1.00,
+                price: priceVal,
+                currency: currencyVal,
                 transactionId: txnId,
                 createdAt: new Date()
             });
 
-            res.send({ success: true, message: "Purchase successful!" });
+            res.send({ success: true, message: "Purchase successful!", txnId, price: priceVal, currency: currencyVal });
         });
 
         app.get('/recipes/:id/purchase-status', async (req, res) => {
@@ -264,6 +283,33 @@ async function run() {
         app.get('/admin/reports', async (req, res) => {
             const reports = await database.collection("reports").find().sort({ createdAt: -1 }).toArray();
             res.send(reports);
+        });
+
+        app.delete('/admin/reports/:id', async (req, res) => {
+            const id = req.params.id;
+            const result = await database.collection("reports").deleteOne({ _id: new ObjectId(id) });
+            res.send({ success: true, message: "Report dismissed successfully" });
+        });
+
+        app.post('/users/:email/upgrade', async (req, res) => {
+            const email = req.params.email;
+            const { price, currency } = req.body;
+            const userUpdate = await database.collection("user").updateOne(
+                { email },
+                { $set: { role: "premium", plan: "premium" } }
+            );
+            const txnId = `TXN-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+            const priceVal = parseFloat(price) || 19.99;
+            const currencyVal = currency || "USD";
+            await database.collection("transactions").insertOne({
+                userEmail: email,
+                recipeName: "Premium Membership Upgrade",
+                price: priceVal,
+                currency: currencyVal,
+                transactionId: txnId,
+                createdAt: new Date()
+            });
+            res.send({ success: true, message: "Upgraded to Premium successfully!", txnId, price: priceVal, currency: currencyVal });
         });
 
         app.get('/admin/users', async (req, res) => {
