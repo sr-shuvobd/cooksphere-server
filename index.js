@@ -66,8 +66,15 @@ async function run() {
             if (search) {
                 query.recipeName = { $regex: search, $options: 'i' };
             }
+            if (req.query.isFeatured) {
+                query.isFeatured = req.query.isFeatured === 'true';
+            }
+            let sort = {};
+            if (req.query.sortBy === 'likesCount') {
+                sort = { likesCount: -1 };
+            }
             const skip = (parseInt(page) - 1) * parseInt(limit);
-            const recipes = await recipesCollection.find(query).skip(skip).limit(parseInt(limit)).toArray();
+            const recipes = await recipesCollection.find(query).sort(sort).skip(skip).limit(parseInt(limit)).toArray();
             for (let recipe of recipes) {
                 if (recipe.authorEmail) {
                     const userDoc = await database.collection("user").findOne({ email: recipe.authorEmail });
