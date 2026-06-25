@@ -93,10 +93,6 @@ async function run() {
             if (!user) {
                 return res.status(404).send({ message: "User not found" });
             }
-            if (user.coins === undefined || user.coins === null) {
-                await database.collection("user").updateOne({ email }, { $set: { coins: 50 } });
-                user.coins = 50;
-            }
             res.send(user);
         });
 
@@ -117,19 +113,19 @@ async function run() {
             if (purchaseRecord) {
                 return res.send({ success: true, message: "Already purchased" });
             }
-            const viewer = await database.collection("user").findOne({ email });
-            const viewerCoins = viewer && (viewer.coins !== undefined && viewer.coins !== null) ? viewer.coins : 50;
-            if (viewerCoins < 10) {
-                return res.status(400).send({ message: "Not enough coins. Please buy more coins!" });
-            }
-            await database.collection("user").updateOne({ email }, { $set: { coins: viewerCoins - 10 } });
-            const creatorEmail = recipe.authorEmail;
-            if (creatorEmail) {
-                const creator = await database.collection("user").findOne({ email: creatorEmail });
-                const creatorCoins = creator && (creator.coins !== undefined && creator.coins !== null) ? creator.coins : 50;
-                await database.collection("user").updateOne({ email: creatorEmail }, { $set: { coins: creatorCoins + 1 } });
-            }
+            
+            const txnId = `TXN-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
             await database.collection("purchases").insertOne({ userEmail: email, recipeId, createdAt: new Date() });
+            
+            await database.collection("transactions").insertOne({
+                userEmail: email,
+                recipeId,
+                recipeName: recipe.recipeName,
+                price: 1.00,
+                transactionId: txnId,
+                createdAt: new Date()
+            });
+
             res.send({ success: true, message: "Purchase successful!" });
         });
 
@@ -158,24 +154,7 @@ async function run() {
             res.send({ hasAccess: false });
         });
 
-        app.post('/users/:email/buy-coins', async (req, res) => {
-            const email = req.params.email;
-            const { coins, price, transactionId } = req.body;
-            const user = await database.collection("user").findOne({ email });
-            if (!user) {
-                return res.status(404).send({ message: "User not found" });
-            }
-            const currentCoins = (user.coins !== undefined && user.coins !== null) ? user.coins : 50;
-            await database.collection("user").updateOne({ email }, { $set: { coins: currentCoins + parseInt(coins) } });
-            await database.collection("transactions").insertOne({
-                userEmail: email,
-                coins: parseInt(coins),
-                price,
-                transactionId,
-                createdAt: new Date()
-            });
-            res.send({ success: true, message: `Successfully purchased ${coins} coins!` });
-        });
+
 
         app.get('/users/:email/purchased-recipes', async (req, res) => {
             const email = req.params.email;
@@ -285,6 +264,27 @@ async function run() {
         app.get('/admin/reports', async (req, res) => {
             const reports = await database.collection("reports").find().sort({ createdAt: -1 }).toArray();
             res.send(reports);
+        });
+
+        app.get('/admin/users', async (req, res) => {
+            const users = await database.collection("user").find().toArray();
+            res.send(users);
+        });
+
+        app.put('/admin/users/:email/role', async (req, res) => {
+            const email = req.params.email;
+            const { role } = req.body;
+            if (!role) {
+                return res.status(400).send({ message: "Role is required" });
+            }
+            const result = await database.collection("user").updateOne(
+                { email },
+                { $set: { role } }
+            );
+            if (result.matchedCount === 0) {
+                return res.status(404).send({ message: "User not found" });
+            }
+            res.send({ success: true, message: `User role updated to ${role}` });
         });
 
 
