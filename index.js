@@ -55,13 +55,16 @@ async function run() {
         });
 
         app.get('/recipes', async (req, res) => {
-            const { category, authorEmail, page = 1, limit = 12 } = req.query;
+            const { category, authorEmail, search, page = 1, limit = 12 } = req.query;
             let query = {};
             if (category) {
                 query.category = { $in: category.split(',') };
             }
             if (authorEmail) {
                 query.authorEmail = authorEmail;
+            }
+            if (search) {
+                query.recipeName = { $regex: search, $options: 'i' };
             }
             const skip = (parseInt(page) - 1) * parseInt(limit);
             const recipes = await recipesCollection.find(query).skip(skip).limit(parseInt(limit)).toArray();
@@ -75,6 +78,26 @@ async function run() {
             }
             const total = await recipesCollection.countDocuments(query);
             res.send({ recipes, total });
+        });
+
+        app.patch('/recipes/:id/feature', async (req, res) => {
+            const id = req.params.id;
+            const { isFeatured } = req.body;
+            const result = await recipesCollection.updateOne(
+                { _id: new ObjectId(id) },
+                { $set: { isFeatured: !!isFeatured } }
+            );
+            res.send(result);
+        });
+
+        app.patch('/recipes/:id/status', async (req, res) => {
+            const id = req.params.id;
+            const { status } = req.body;
+            const result = await recipesCollection.updateOne(
+                { _id: new ObjectId(id) },
+                { $set: { status: status || "active" } }
+            );
+            res.send(result);
         });
 
         app.get('/admin/stats', async (req, res) => {
