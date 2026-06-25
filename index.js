@@ -39,12 +39,24 @@ async function run() {
         });
 
         app.get('/recipes', async (req, res) => {
-            const { category, page = 1, limit = 12 } = req.query;
-            const query = category ? { category: { $in: category.split(',') } } : {};
+            const { category, authorEmail, page = 1, limit = 12 } = req.query;
+            let query = {};
+            if (category) {
+                query.category = { $in: category.split(',') };
+            }
+            if (authorEmail) {
+                query.authorEmail = authorEmail;
+            }
             const skip = (parseInt(page) - 1) * parseInt(limit);
             const recipes = await recipesCollection.find(query).skip(skip).limit(parseInt(limit)).toArray();
             const total = await recipesCollection.countDocuments(query);
             res.send({ recipes, total });
+        });
+
+        app.get('/admin/stats', async (req, res) => {
+            const totalRecipes = await recipesCollection.countDocuments();
+            const totalUsers = await database.collection("user").countDocuments();
+            res.send({ totalRecipes, totalUsers });
         });
 
 
