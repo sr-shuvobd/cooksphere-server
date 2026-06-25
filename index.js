@@ -38,6 +38,16 @@ async function run() {
             res.send(result);
         });
 
+        app.get('/recipes', async (req, res) => {
+            const { category, page = 1, limit = 12 } = req.query;
+            const query = category ? { category: { $in: category.split(',') } } : {};
+            const skip = (parseInt(page) - 1) * parseInt(limit);
+            const recipes = await recipesCollection.find(query).skip(skip).limit(parseInt(limit)).toArray();
+            const total = await recipesCollection.countDocuments(query);
+            res.send({ recipes, total });
+        });
+
+
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
